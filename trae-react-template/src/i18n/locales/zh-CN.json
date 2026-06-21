@@ -1,0 +1,102 @@
+{
+  "common": {
+    "confirm": "确认",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "add": "添加",
+    "search": "搜索",
+    "reset": "重置",
+    "submit": "提交",
+    "back": "返回",
+    "loading": "加载中...",
+    "noData": "暂无数据",
+    "operation": "操作",
+    "status": "状态",
+    "createTime": "创建时间",
+    "updateTime": "更新时间",
+    "total": "共 {{count}} 条",
+    "success": "操作成功",
+    "error": "操作失败",
+    "warning": "警告",
+    "info": "提示"
+  },
+  "menu": {
+    "dashboard": "仪表盘",
+    "userManagement": "用户管理",
+    "settings": "设置",
+    "profile": "个人资料",
+    "home":"主页",
+    "lego2": "Lego 2.0",
+    "logout": "退出登录",
+    "legoInfo":"legoPicture",
+    "lego": "Lego编辑器"
+  },
+  "login": {
+    "title": "系统登录",
+    "subtitle": "请输入您的账号和密码",
+    "username": "用户名",
+    "password": "密码",
+    "loginButton": "登录",
+    "loginSuccess": "登录成功！",
+    "loginError": "登录失败，请重试",
+    "usernameRequired": "请输入用户名!",
+    "passwordRequired": "请输入密码!",
+    "testAccount": "测试账号：admin / 123456"
+  },
+  "dashboard": {
+    "title": "仪表盘",
+    "welcome": "欢迎回来",
+    "totalUsers": "总用户数",
+    "totalOrders": "总订单数",
+    "totalRevenue": "总收入",
+    "totalViews": "总浏览量",
+    "userGrowth": "用户增长",
+    "orderTrend": "订单趋势",
+    "recentActivities": "最近活动",
+    "quickActions": "快捷操作"
+  },
+  "userManagement": {
+    "title": "用户管理",
+    "addUser": "新增用户",
+    "editUser": "编辑用户",
+    "deleteUser": "删除用户",
+    "username": "用户名",
+    "email": "邮箱",
+    "role": "角色",
+    "avatar": "头像",
+    "actions": "操作",
+    "confirmDelete": "确定要删除该用户吗？",
+    "deleteSuccess": "删除成功",
+    "saveSuccess": "保存成功",
+    "userForm": {
+      "usernameRequired": "请输入用户名",
+      "emailRequired": "请输入邮箱",
+      "emailFormat": "请输入正确的邮箱格式",
+      "roleRequired": "请选择角色"
+    }
+  },
+  "layout": {
+    "appName": "Admin System",
+    "systemName": "管理系统",
+    "systemNameShort": "Admin",
+    "toggleSidebar": "切换侧边栏",
+    "switchTheme": "切换主题",
+    "switchToLight": "切换到亮色模式",
+    "switchToDark": "切换到暗色模式",
+    "language": "语言",
+    "chinese": "中文",
+    "english": "English"
+  },
+  "notFound": {
+    "title": "404",
+    "subtitle": "抱歉，您访问的页面不存在。",
+    "backHome": "返回首页"
+  },
+  "theme": {
+    "light": "亮色模式",
+    "dark": "暗色模式",
+    "auto": "跟随系统"
+  }
+}
