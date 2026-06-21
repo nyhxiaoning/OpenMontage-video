@@ -1,7 +1,14 @@
 # 启动说明
 git clone https://github.com/calesthio/OpenMontage.git
 cd OpenMontage
-make setup
+- make setup
+注意：这里已经使用了python虚拟环境创建：
+那么废除当前的make，使用
+
+
+
+- 最后在ide的编辑器输入
+
 Open the project in your AI coding assistant and tell it what you want:
 在你的AI编码助手里打开项目，然后告诉它你的需求：
 
