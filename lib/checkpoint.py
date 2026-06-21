@@ -15,6 +15,7 @@ from typing import Any, Optional
 import jsonschema
 
 from schemas.artifacts import ARTIFACT_NAMES, validate_artifact
+from lib.pipeline_config_check import check_stage_config, format_check_report, StageConfigResult, ToolConfigStatus, _build_summary
 
 # All known stages across all pipelines (used only for artifact name lookup).
 ALL_KNOWN_STAGES = frozenset([
@@ -38,6 +39,67 @@ CANONICAL_STAGE_ARTIFACTS = {
     "compose": "render_report",
     "publish": "publish_log",
 }
+
+
+def run_pre_stage_config_check(
+    pipeline: str,
+    stage: str,
+    project_id: str,
+    auto_skip: bool = False,
+) -> tuple[bool, dict]:
+    """Run a configuration check before a pipeline stage begins.
+
+    This is the hook the agent calls at the start of each stage (especially
+    assets, which uses paid API tools). It uses ``pipeline_config_check`` to
+    validate that all required tools are configured.
+
+    Returns ``(ready, result_dict)`` where:
+
+    - ``ready`` — True when all required tools pass config check.
+    - ``result_dict`` — the ``StageConfigResult`` as a dict, containing
+      per-tool status, missing required/optional tools, free fallback
+      suggestions, and a human-readable summary.
+
+    Usage by agent::
+
+        ready, result = run_pre_stage_config_check("cinematic", "assets", "my-project")
+        if not ready:
+            print(format_check_report(result))   # present to user
+            # Offer options: configure / fallback / skip
+            # Record user's choice in decision_log
+            # Only proceed after explicit user approval
+
+    The function never blocks or auto-falls back — the agent decides based on
+    the returned data, per the governance contract.
+    """
+    try:
+        result = check_stage_config(pipeline, stage, project_id)
+    except Exception as exc:
+        return False, {
+            "ready": False,
+            "error": str(exc),
+            "summary": f"Config check failed to run: {exc}",
+            "missing_required": [],
+            "missing_optional": [],
+            "free_fallbacks_available": [],
+            "tool_results": [],
+        }
+
+    if auto_skip and not result.ready:
+        # Downgrade optional missing tools to skipped
+        for r in result.missing_optional:
+            r.status = ToolConfigStatus.SKIPPED
+        result.missing_optional = []
+        result.ready = len(result.missing_required) == 0
+        result.summary = _build_summary(
+            result.ready,
+            result.tool_results,
+            result.missing_required,
+            result.missing_optional,
+            result.free_fallbacks_available,
+        )
+
+    return result.ready, result.to_dict()
 
 # Additional artifacts that may be produced alongside canonical ones.
 # These are not stage-defining but are required by governance contracts.

@@ -220,3 +220,135 @@ def get_configured_providers(env: Optional[dict[str, str]] = None) -> list[str]:
         if env.get(config["env_var"]):
             configured.append(provider)
     return configured
+
+
+# ---------------------------------------------------------------------------
+# Fallback planning
+# ---------------------------------------------------------------------------
+
+_FREE_FALLBACK_MAP: dict[str, list[str]] = {
+    "video_generation": ["pexels", "pixabay"],
+    "image_generation": ["pexels", "pixabay"],
+    "tts": ["google_tts"],
+    "music_generation": [],
+    "video_post": ["ffmpeg"],
+    "audio_processing": ["ffmpeg"],
+    "enhancement": ["ffmpeg"],
+    "analysis": ["local", "ffmpeg"],
+    "subtitle": ["openmontage"],
+    "graphics": ["mermaid", "pygments"],
+    "avatar": [],
+    "character_animation": ["openmontage"],
+}
+
+_TOOL_CAPABILITY_MAP: dict[str, str] = {
+    # Video generation
+    "seedance_video": "video_generation",
+    "kling_video": "video_generation",
+    "hunyuan_video": "video_generation",
+    "wan_video": "video_generation",
+    "cogvideo_video": "video_generation",
+    "ltx_video_local": "video_generation",
+    "ltx_video_modal": "video_generation",
+    # Image generation
+    "flux_image": "image_generation",
+    "dalle_image": "image_generation",
+    "google_imagen": "image_generation",
+    "recraft_image": "image_generation",
+    "tongyi_image": "image_generation",
+    # TTS
+    "elevenlabs_tts": "tts",
+    "google_tts": "tts",
+    "openai_tts": "tts",
+    "piper_tts": "tts",
+    "doubao_tts": "tts",
+    "elevenlabs_music": "music_generation",
+    "suno_music": "music_generation",
+    # Composition
+    "video_compose": "video_post",
+    "video_stitch": "video_post",
+    # Audio
+    "audio_mixer": "audio_processing",
+    # Enhancement
+    "upscaler": "enhancement",
+    "bg_remover": "enhancement",
+    # Analysis
+    "transcriber": "analysis",
+    "source_media_review": "analysis",
+    "scene_detector": "analysis",
+    # Subtitle
+    "subtitle_gen": "subtitle",
+    # Graphics
+    "mermaid_gen": "graphics",
+    # Avatar
+    "heygen_video": "avatar",
+    # Character animation
+    "character_animation": "character_animation",
+}
+
+
+def plan_fallback(
+    missing_tools: list[str],
+    env: Optional[dict[str, str]] = None,
+) -> dict[str, Any]:
+    """Generate a free-fallback plan for a list of unavailable tools.
+
+    Args:
+        missing_tools: Tool names that are not configured.
+        env: Environment dict (defaults to os.environ).
+
+    Returns:
+        Dict with:
+        - ``can_proceed_free``: True if enough free tools exist for a usable pipeline
+        - ``fallbacks``: mapping of missing_tool -> free alternative tool name
+        - ``uncovered``: tools with no free fallback
+        - ``free_plan``: capability-level summary of free providers available
+    """
+    if env is None:
+        import os
+        env = os.environ
+
+    fallbacks: dict[str, str] = {}
+    uncovered: list[str] = []
+    free_caps: dict[str, bool] = {}
+
+    # Always-available capabilities (no API key needed)
+    _always_available = {"video_post", "audio_processing", "enhancement", "analysis",
+                         "subtitle", "graphics", "character_animation"}
+
+    for cap in _always_available:
+        if _FREE_FALLBACK_MAP.get(cap):
+            free_caps[cap] = True
+
+    for tool_name in missing_tools:
+        cap = _TOOL_CAPABILITY_MAP.get(tool_name, "other")
+        free_providers = _FREE_FALLBACK_MAP.get(cap, [])
+
+        if free_providers:
+            fallbacks[tool_name] = free_providers[0]
+            free_caps[cap] = True
+        else:
+            uncovered.append(tool_name)
+
+    # Build capability-level summary
+    free_plan: dict[str, list[str]] = {}
+    for cap, providers in _FREE_FALLBACK_MAP.items():
+        if providers:
+            free_plan[cap] = providers
+
+    # Determine if pipeline can proceed with free tools only
+    # Can proceed if: all missing tools have free fallbacks,
+    # AND at least one of video/image or tts/composition is available
+    critical_caps = {"video_generation", "image_generation"}
+    composition_caps = {"tts", "video_post"}
+    has_media = any(cap in free_caps for cap in critical_caps)
+    has_composition = any(cap in free_caps for cap in composition_caps)
+    no_gaps = len(uncovered) == 0
+    can_proceed = no_gaps and (has_media or has_composition)
+
+    return {
+        "can_proceed_free": can_proceed,
+        "fallbacks": fallbacks,
+        "uncovered": uncovered,
+        "free_plan": free_plan,
+    }

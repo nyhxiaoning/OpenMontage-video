@@ -8,6 +8,43 @@ Checkpoints are the save points of a pipeline. They enable resume-from-failure, 
 
 ## Protocol
 
+### Step 0: Pre-Stage Config Check (Pipeline Integration)
+
+**Before executing any stage** (especially `assets`, which uses paid API tools), run a configuration check:
+
+```python
+from lib.checkpoint import run_pre_stage_config_check
+
+ready, result = run_pre_stage_config_check(
+    pipeline="cinematic",
+    stage="assets",
+    project_id="my-project",
+)
+
+if not ready:
+    # Present the report to the user
+    from lib.pipeline_config_check import format_check_report
+    print(format_check_report(result))
+
+    # Offer options:
+    #   (a) Configure — add missing API key(s) to .env
+    #   (b) Fallback — use alternative providers listed in result
+    #   (c) Skip — proceed without missing tools
+    #   (d) Skip config entirely — use free models only
+
+    # Record the user's choice in decision_log with category "config_check"
+    # Only proceed after user explicitly approves
+
+    # If auto-skip mode (user previously chose "skip config"):
+    ready, result = run_pre_stage_config_check(
+        pipeline="cinematic", stage="assets", project_id="my-project", auto_skip=True
+    )
+```
+
+**Fallback priority:** tool's own `fallback_tools` > free providers from `_get_free_fallback()` > skip.
+
+If all required tools pass: proceed silently — do not narrate.
+
 ### Step 1: Check Manifest Policy
 
 Read the current stage's configuration from the pipeline manifest:
