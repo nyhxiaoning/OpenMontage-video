@@ -49,66 +49,42 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Request interceptor — log for debugging
-api.interceptors.request.use((config) => {
-  console.log(`[ConfigAPI] ${config.method?.toUpperCase()} ${config.url}`)
-  return config
-})
-
-// Response interceptor — our FastAPI returns raw data, not {code, data, message}
+// Response interceptor — unwrap response.data so callers get the raw payload
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const message = error.response?.data?.detail || error.message || 'Request failed'
-    return Promise.reject(new Error(message))
+    const msg = error.response?.data?.detail || error.message || 'Request failed'
+    return Promise.reject(new Error(msg))
   }
 )
 
 export const configApi = {
   getStatus: (): Promise<StatusResponse> =>
-    api.get('/status').then((r: any) => r.data as StatusResponse),
+    api.get('/status'),
 
   getModels: (): Promise<ModelCard[]> =>
-    api.get('/models').then((r: any) => r.data as ModelCard[]),
+    api.get('/models'),
 
   getPipelines: (): Promise<PipelineInfo[]> =>
-    api.get('/pipelines').then((r: any) => r.data as PipelineInfo[]),
+    api.get('/pipelines'),
 
   getPipelineDetail: (name: string): Promise<any> =>
-    api.get(`/pipelines/${name}`).then((r: any) => r.data),
+    api.get(`/pipelines/${name}`),
 
   configModel: (name: string, key: string, value: string, persist = true): Promise<any> =>
-    api.post(`/models/${name}/config`, { key, value, persist }).then((r: any) => r.data),
+    api.post(`/models/${name}/config`, { key, value, persist }),
 
   deleteModelConfig: (name: string): Promise<any> =>
-    api.delete(`/models/${name}/config`).then((r: any) => r.data),
+    api.delete(`/models/${name}/config`),
 
   runConfigCheck: (): Promise<ConfigCheckResult[]> =>
-    api.post('/check').then((r: any) => r.data as ConfigCheckResult[]),
-
-  streamConfigCheck: () =>
-    fetch('http://localhost:3001/api/check/stream').then((res) => {
-      if (!res.body) throw new Error('No stream')
-      return new ReadableStream({
-        start(controller) {
-          const reader = res.body!.getReader()
-          reader.read().then(({ done }) => {
-            if (done) controller.close()
-          })
-          ;(reader as any)._read = () =>
-            reader.read().then(({ done, value }) => {
-              if (done) controller.close()
-              else controller.enqueue(value)
-            })
-        },
-      })
-    }),
+    api.post('/check'),
 
   skipConfig: (mode = 'free_fallback', selectedTools: string[] = []): Promise<any> =>
-    api.post('/skip-config', { mode, selected_tools: selectedTools }).then((r: any) => r.data),
+    api.post('/skip-config', { mode, selected_tools: selectedTools }),
 
   getCapabilities: (): Promise<any> =>
-    api.get('/capabilities').then((r: any) => r.data),
+    api.get('/capabilities'),
 }
 
 export default configApi

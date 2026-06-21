@@ -117,15 +117,18 @@ const ConfigDashboard: React.FC = () => {
         configApi.getModels(),
         configApi.getPipelines(),
       ])
-      setStatus(statusRes)
-      setModels(modelsRes)
-      setPipelines(pipelinesRes)
+      setStatus(statusRes || null)
+      setModels(Array.isArray(modelsRes) ? modelsRes : [])
+      const pipelinesList = Array.isArray(pipelinesRes) ? pipelinesRes : []
+      setPipelines(pipelinesList)
 
       // Auto-select cinematic pipeline
-      if (!selectedPipeline) {
-        const cinematic = (pipelinesRes as PipelineInfo[]).find((p) => p.name === 'cinematic')
+      if (!selectedPipeline && pipelinesList.length > 0) {
+        const cinematic = pipelinesList.find((p: any) => p.name === 'cinematic')
         if (cinematic) {
           setSelectedPipeline('cinematic')
+        } else {
+          setSelectedPipeline(pipelinesList[0]?.name || '')
         }
       }
     } catch (err: any) {

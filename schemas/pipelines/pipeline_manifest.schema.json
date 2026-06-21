@@ -155,6 +155,11 @@
         "custom_tools": { "type": "boolean", "default": false }
       },
       "additionalProperties": false
+    },
+    "production_modes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Production modes this pipeline supports"
     }
   },
   "additionalProperties": false
