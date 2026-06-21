@@ -1,6 +1,19 @@
-<p align="center">
-  <img src="assets/logo.png" alt="OpenMontage" width="200">
-</p>
+# 启动说明
+git clone https://github.com/calesthio/OpenMontage.git
+cd OpenMontage
+make setup
+Open the project in your AI coding assistant and tell it what you want:
+在你的AI编码助手里打开项目，然后告诉它你的需求：
+
+"Make a 60-second animated explainer about how neural networks learn"
+Or if you want the real-footage path:
+或者你想要实拍素材路径的话：
+
+"Make a 75-second documentary montage about city life in the rain. Use real footage only, no narration, elegiac tone, with music."
+That's it. The agent researches your topic with live web search, generates AI images, writes and narrates the script with voice direction, finds royalty-free background music automatically, burns in word-level subtitles, and renders the final video. Before you see anything, the system runs a multi-point self-review — ffprobe validation, frame sampling, audio level analysis, delivery promise verification, and subtitle checks. Every provider selection is scored across 7 dimensions with an auditable decision log. Every creative decision gets your approval.
+就是这样。该智能体通过实时网络搜索研究你的主题，生成人工智能图像，编写并配音脚本（附带语音指导），自动查找无版权背景音乐，嵌入逐字字幕，并渲染出最终视频。在生成成品前，系统会进行多维度自检——包括 ffprobe 验证、帧采样、音频电平分析、交付承诺核验以及字幕检查。每个供应商的选择都会从7个维度进行评分，并生成可追溯的决策日志。每一个创意决策都需经你确认。
+
+
 
 <h1 align="center">OpenMontage</h1>
 
