@@ -52,6 +52,7 @@ def _ensure_env_loaded() -> None:
 _ensure_env_loaded()
 
 from lib.config_health import check_all_providers, get_configured_providers, ProviderHealth, HealthStatus
+from lib.pipeline_config_check import check_stage_config, format_check_report, ToolConfigStatus, _build_summary
 
 # Try to import registry — may fail on first setup
 try:
@@ -488,6 +489,42 @@ async def delete_model_config(name: str) -> dict[str, str]:
             f.write(f"{k}={v}\n")
 
     return {"success": True, "removed": env_vars_to_remove}
+
+
+@app.post("/api/check/stage")
+async def check_stage(payload: dict) -> dict[str, Any]:
+    """Run a stage-level configuration check for a specific pipeline + stage.
+
+    Request body:
+        pipeline: str — pipeline name (e.g. "cinematic")
+        stage: str — stage name (e.g. "assets")
+        auto_skip: bool — whether to auto-skip optional missing tools
+
+    Returns the same format as check_stage_config().to_dict()
+    """
+    pipeline = payload.get("pipeline", "")
+    stage = payload.get("stage", "")
+    auto_skip = payload.get("auto_skip", False)
+
+    if not pipeline or not stage:
+        raise HTTPException(status_code=400, detail="pipeline and stage are required")
+
+    try:
+        from lib.pipeline_config_check import check_stage_config
+        result = check_stage_config(pipeline, stage, payload.get("project_id", "default"))
+        if auto_skip and not result.ready:
+            for r in result.missing_optional:
+                r.status = ToolConfigStatus.SKIPPED
+            result.missing_optional = []
+            result.ready = len(result.missing_required) == 0
+            result.summary = _build_summary(
+                result.ready, result.tool_results,
+                result.missing_required, result.missing_optional,
+                result.free_fallbacks_available,
+            )
+        return result.to_dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/check")

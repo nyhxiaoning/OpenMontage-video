@@ -85,6 +85,9 @@ export const configApi = {
 
   getCapabilities: (): Promise<any> =>
     api.get('/capabilities'),
+
+  checkStage: (pipeline: string, stage: string, autoSkip = false): Promise<any> =>
+    api.post('/check/stage', { pipeline, stage, auto_skip: autoSkip }),
 }
 
 export default configApi
