@@ -37,6 +37,8 @@ import {
 import type { ModelCard, PipelineInfo, StatusResponse, ConfigCheckResult } from '@/services/configApi'
 import { configApi } from '@/services/configApi'
 import './styles.css'
+import { useTranslation } from 'react-i18next'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
 
 const { Text, Title, Paragraph } = Typography
 const { Panel } = Collapse
@@ -91,6 +93,7 @@ type CapGroup = {
    ============================================================ */
 
 const ConfigDashboard: React.FC = () => {
+  const { t } = useTranslation()
   // ---- State ----
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState<StatusResponse | null>(null)
@@ -145,7 +148,7 @@ const ConfigDashboard: React.FC = () => {
         }
       }
     } catch (err: any) {
-      message.error(`Failed to load config: ${err.message}`)
+      message.error(t('config.failedToLoadConfig', { message: err.message }))
     } finally {
       setLoading(false)
     }
@@ -156,7 +159,7 @@ const ConfigDashboard: React.FC = () => {
       const detail = await configApi.getPipelineDetail(name)
       setPipelineDetail(detail)
     } catch (err: any) {
-      message.error(`Failed to load pipeline: ${err.message}`)
+      message.error(t('config.failedToLoadPipeline', { message: err.message }))
     }
   }
 
@@ -243,11 +246,11 @@ const ConfigDashboard: React.FC = () => {
     setConfiguring(modelName)
     try {
       await configApi.configModel(modelName, values.key, values.value)
-      message.success(`${modelName} configured successfully`)
+      message.success(t('config.modelConfigured', { name: modelName }))
       keyForm.resetFields()
       fetchAll()
     } catch (err: any) {
-      message.error(`Failed to configure ${modelName}: ${err.message}`)
+      message.error(t('config.configuredSuccess', { name: modelName }))
     } finally {
       setConfiguring(null)
     }
@@ -256,10 +259,10 @@ const ConfigDashboard: React.FC = () => {
   const handleDeleteConfig = async (modelName: string) => {
     try {
       await configApi.deleteModelConfig(modelName)
-      message.success(`${modelName} configuration removed`)
+      message.success(t('config.modelRemoved', { name: modelName }))
       fetchAll()
     } catch (err: any) {
-      message.error(`Failed to remove ${modelName}: ${err.message}`)
+      message.error(t('config.removeSuccess', { name: modelName }))
     }
   }
 
@@ -270,12 +273,12 @@ const ConfigDashboard: React.FC = () => {
       setCheckResults(results)
       const missing = results.filter((r) => r.status !== 'ok')
       if (missing.length > 0) {
-        message.warning(`${missing.length} tools need configuration`)
+        message.warning(t('config.toolNeedConfig', { count: missing.length }))
       } else {
-        message.success('All tools configured and ready')
+        message.success(t('config.allStagesPass'))
       }
     } catch (err: any) {
-      message.error(`Check failed: ${err.message}`)
+      message.error(t('config.preflightCheckFailed', { message: err.message }))
     } finally {
       setChecking(false)
     }
@@ -303,11 +306,11 @@ const ConfigDashboard: React.FC = () => {
   const confirmSkip = async () => {
     try {
       await configApi.skipConfig(skipMode)
-      message.info('Proceeding with available models only')
+      message.info(t('config.proceedingAvailable'))
       setSkipModalVisible(false)
       setFallbackPlan(null)
     } catch (err: any) {
-      message.error(err.message)
+      message.error(err.message || t('config.preflightCheckFailed', { message: '' }))
     }
   }
 
@@ -319,7 +322,7 @@ const ConfigDashboard: React.FC = () => {
   // Run pre-flight check across all pipeline stages
   const handlePreFlightCheck = async () => {
     if (!selectedPipeline || !pipelineDetail) {
-      message.warning('Please select a pipeline first')
+      message.warning(t('config.selectPipelineFirst'))
       return
     }
     setCheckingStages(true)
@@ -339,12 +342,12 @@ const ConfigDashboard: React.FC = () => {
       setStageChecks(results)
       const blocked = Object.values(results).filter((r: any) => !r.ready).length
       if (blocked > 0) {
-        message.warning(`${blocked} stages have config issues — see details below`)
+        message.warning(t('config.toolNeedConfig', { count: blocked }))
       } else {
-        message.success('All stages pass config check')
+        message.success(t('config.allStagesPass'))
       }
     } catch (err: any) {
-      message.error(`Pre-flight check failed: ${err.message}`)
+      message.error(t('config.preflightCheckFailed', { message: err.message }))
     } finally {
       setCheckingStages(false)
     }
@@ -352,33 +355,33 @@ const ConfigDashboard: React.FC = () => {
 
   const handleStartPipeline = () => {
     if (!selectedPipeline) {
-      message.warning('Please select a pipeline first')
+      message.warning(t('config.selectPipelineFirst'))
       return
     }
     if (!pipelineDetail) {
-      message.warning('Pipeline details not loaded yet')
+      message.warning(t('config.pipelineDetailsNotLoaded'))
       return
     }
     const blocked = Object.entries(stageChecks).filter(([, r]: [string, any]) => !r.ready)
     if (blocked.length > 0) {
       const names = blocked.map(([name]) => name).join(', ')
       Modal.confirm({
-        title: 'Start Pipeline with Config Issues?',
-        content: `Stages with missing config: ${names}. Pipeline may fail or use fallbacks. Proceed anyway?`,
-        okText: 'Start with Fallbacks',
-        cancelText: 'Configure First',
+        title: t('config.startPipelineWithIssues'),
+        content: t('config.stagesWithIssues', { names }),
+        okText: t('config.startWithFallbacks'),
+        cancelText: t('config.configureFirst'),
         onOk: () => {
-          message.info(`Pipeline "${selectedPipeline}" started with fallback mode`)
+          message.info(t('config.pipelineStartedFallback', { name: selectedPipeline }))
         },
       })
     } else {
       Modal.confirm({
-        title: 'Start Pipeline?',
-        content: `Starting "${selectedPipeline}" pipeline. All stages pass config check.`,
-        okText: 'Start',
-        cancelText: 'Cancel',
+        title: t('config.startPipelineConfirm'),
+        content: t('config.pipelineWouldStart', { name: selectedPipeline }),
+        okText: t('config.startPipeline'),
+        cancelText: t('common.cancel'),
         onOk: () => {
-          message.info(`Pipeline "${selectedPipeline}" would start here`)
+          message.info(t('config.pipelineWouldStart', { name: selectedPipeline }))
         },
       })
     }
@@ -390,16 +393,16 @@ const ConfigDashboard: React.FC = () => {
 
   const HealthTag = ({ model }: { model: ModelCard }) => {
     if (!model.has_api_key) {
-      return <Tag icon={<CloseCircleOutlined />} color="error">No Key</Tag>
+      return <Tag icon={<CloseCircleOutlined />} color="error">{t('config.noKey')}</Tag>
     }
     const status = model.health_status || 'unknown'
     const cfg: Record<string, { color: string; icon: any; text: string }> = {
-      ok:          { color: 'success', icon: <CheckCircleOutlined />, text: 'Connected' },
-      missing_key: { color: 'error',   icon: <CloseCircleOutlined />, text: 'Missing Key' },
-      invalid_key: { color: 'error',   icon: <CloseCircleOutlined />, text: 'Invalid Key' },
-      rate_limited:{ color: 'warning', icon: <ExclamationCircleOutlined />, text: 'Rate Limited' },
-      error:       { color: 'error',   icon: <ExclamationCircleOutlined />, text: 'Error' },
-      unknown:     { color: 'default', icon: <ExclamationCircleOutlined />, text: 'Checking...' },
+      ok:          { color: 'success', icon: <CheckCircleOutlined />, text: t('config.connected') },
+      missing_key: { color: 'error',   icon: <CloseCircleOutlined />, text: t('config.missingKey') },
+      invalid_key: { color: 'error',   icon: <CloseCircleOutlined />, text: t('config.invalidKey') },
+      rate_limited:{ color: 'warning', icon: <ExclamationCircleOutlined />, text: t('config.rateLimited') },
+      error:       { color: 'error',   icon: <ExclamationCircleOutlined />, text: t('config.error') },
+      unknown:     { color: 'default', icon: <ExclamationCircleOutlined />, text: t('config.checking') },
     }
     const c = cfg[status] || cfg.unknown
     return (
@@ -425,14 +428,14 @@ const ConfigDashboard: React.FC = () => {
             <Text code style={{ fontSize: 11, background: '#f5f5f5', padding: '2px 8px', borderRadius: 4, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {maskedKey}
             </Text>
-            <Tooltip title="Copy .env line">
+            <Tooltip title={t('config.copyEnvLine')}>
               <Button
                 type="text"
                 size="small"
                 icon={<CopyOutlined />}
                 onClick={() => {
                   navigator.clipboard.writeText(`${envVar}=<your-api-key>`)
-                  message.success('Copied')
+                  message.success(t('config.copied'))
                 }}
                 style={{ fontSize: 11 }}
               />
@@ -440,7 +443,7 @@ const ConfigDashboard: React.FC = () => {
           </div>
           <Space size="small">
             <Button type="link" size="small" onClick={() => setExpanded(true)}>
-              Update Key
+              {t('config.updateKey')}
             </Button>
             <Button
               type="link"
@@ -448,13 +451,13 @@ const ConfigDashboard: React.FC = () => {
               danger
               onClick={() => {
                 Modal.confirm({
-                  title: 'Remove API Key?',
-                  content: `This will remove the ${model.provider} API key.`,
+                  title: t('config.removeApiKeyConfirm'),
+                  content: t('config.removeApiKeyContent', { provider: model.provider }),
                   onOk: () => handleDeleteConfig(model.name),
                 })
               }}
             >
-              Remove
+              {t('config.remove')}
             </Button>
           </Space>
         </Space>
@@ -466,7 +469,7 @@ const ConfigDashboard: React.FC = () => {
         <Form layout="inline" onFinish={handleSubmit} size="small">
           <Form.Item
             name="apiKey"
-            rules={[{ required: true, message: 'Enter API key' }]}
+            rules={[{ required: true, message: t('config.enterApiKey') }]}
             style={{ marginBottom: 4, flex: 1 }}
           >
             <Input.Password
@@ -477,13 +480,13 @@ const ConfigDashboard: React.FC = () => {
           </Form.Item>
           <Form.Item style={{ marginBottom: 4 }}>
             <Button type="primary" htmlType="submit" size="small" loading={configuring === model.name}>
-              Save
+              {t('config.save')}
             </Button>
           </Form.Item>
         </Form>
         {model.install_instructions && (
           <div className="config-hint">
-            Get key: {model.install_instructions.substring(0, 100)}
+            {t('config.getKey')} {model.install_instructions.substring(0, 100)}
             {model.install_instructions.length > 100 ? '...' : ''}
           </div>
         )}
@@ -498,7 +501,7 @@ const ConfigDashboard: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Spin size="large" tip="Loading configuration..." />
+        <Spin size="large" tip={t('common.loading')} />
       </div>
     )
   }
@@ -517,18 +520,19 @@ const ConfigDashboard: React.FC = () => {
       <div className="config-header">
         <div className="config-header-left">
           <Title level={3} style={{ margin: 0 }}>
-            <ApiOutlined /> Model Configuration
+            <ApiOutlined /> {t('config.title')}
           </Title>
           <Text type="secondary">
-            Manage API keys and providers for your video production pipeline
+            {t('config.subtitle')}
           </Text>
         </div>
         <Space>
+          <LanguageSwitcher size="small" />
           <Button icon={<ReloadOutlined />} onClick={fetchAll}>
-            Refresh
+            {t('config.refresh')}
           </Button>
           <Button icon={<PlayCircleOutlined />} type="primary" onClick={handleStartPipeline}>
-            Start Pipeline
+            {t('config.startPipeline')}
           </Button>
         </Space>
       </div>
@@ -537,17 +541,17 @@ const ConfigDashboard: React.FC = () => {
       <div className="pipeline-banner">
         <RocketOutlined className="pipeline-banner-icon" />
         <div className="pipeline-banner-info">
-          <h3>Pipeline</h3>
+          <h3>{t('menu.dashboard')}</h3>
           <p>
             {pipelineDetail
-              ? `${pipelineDetail.configured_count}/${pipelineDetail.total_count} models configured for this pipeline`
-              : 'Select a pipeline to see recommended models'}
+              ? t('config.configuredForPipeline', { count: pipelineDetail.configured_count, total: pipelineDetail.total_count })
+              : t('config.pipelineSelect')}
           </p>
         </div>
         <div className="pipeline-select-wrapper">
           <Select
             style={{ width: '100%' }}
-            placeholder="Select pipeline..."
+            placeholder={t('config.selectPipeline')}
             value={selectedPipeline || undefined}
             onChange={handlePipelineChange}
             options={pipelines.map((p) => ({
@@ -566,10 +570,10 @@ const ConfigDashboard: React.FC = () => {
         <Card size="small" style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <Text strong style={{ fontSize: 14 }}>Pre-flight Check</Text>
+              <Text strong style={{ fontSize: 14 }}>{t('config.preflightCheck')}</Text>
               <br />
               <Text type="secondary" style={{ fontSize: 12 }}>
-                Verify all stages have required tools configured before starting
+                {t('config.preflightDesc')}
               </Text>
             </div>
             <Space>
@@ -579,7 +583,7 @@ const ConfigDashboard: React.FC = () => {
                 loading={checkingStages}
                 onClick={handlePreFlightCheck}
               >
-                Check All Stages
+                {t('config.checkAllStages')}
               </Button>
             </Space>
           </div>
@@ -607,26 +611,26 @@ const ConfigDashboard: React.FC = () => {
                           }} />
                           <Text strong style={{ fontSize: 13 }}>{stage.name}</Text>
                           {ready ? (
-                            <Tag color="success" style={{ fontSize: 11 }}>Ready</Tag>
+                            <Tag color="success" style={{ fontSize: 11 }}>{t('config.allReady')}</Tag>
                           ) : (
                             <Tag color="error" style={{ fontSize: 11 }}>
-                              {missingCount} tool{missingCount > 1 ? 's' : ''} need config
+                              {missingCount} {t('config.toolsNeedConfig', { count: missingCount })}
                             </Tag>
                           )}
                         </div>
                         {!ready && check.missing_required?.length > 0 && (
                           <div style={{ marginTop: 4, fontSize: 11, color: '#ff4d4f' }}>
-                            Required: {check.missing_required.map((t: any) => t.tool_name || t).join(', ')}
+                            {t('config.required')} {check.missing_required.map((t: any) => t.tool_name || t).join(', ')}
                           </div>
                         )}
                         {!ready && check.missing_optional?.length > 0 && (
                           <div style={{ marginTop: 2, fontSize: 11, color: '#faad14' }}>
-                            Optional: {check.missing_optional.map((t: any) => t.tool_name || t).join(', ')}
+                            {t('config.optional')} {check.missing_optional.map((t: any) => t.tool_name || t).join(', ')}
                           </div>
                         )}
                         {check.free_fallbacks_available?.length > 0 && (
                           <div style={{ marginTop: 2, fontSize: 11, color: '#1890ff' }}>
-                            Free fallbacks: {check.free_fallbacks_available.join(', ')}
+                            {t('config.freeFallbacks')} {check.free_fallbacks_available.join(', ')}
                           </div>
                         )}
                       </Card>
@@ -645,21 +649,21 @@ const ConfigDashboard: React.FC = () => {
           <div className="stat-card-value" style={{ color: completionPct === 100 ? '#52c41a' : '#faad14' }}>
             {configuredCount}<span style={{ color: '#bfbfbf', fontWeight: 400 }}>/{totalCount}</span>
           </div>
-          <div className="stat-card-label">Providers Configured</div>
+          <div className="stat-card-label">{t('config.providersConfigured')}</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-value">{pipelines.length}</div>
-          <div className="stat-card-label">Pipelines Available</div>
+          <div className="stat-card-label">{t('config.pipelinesAvailable')}</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-value" style={{ color: stats.recommended === stats.recommendedTotal ? '#52c41a' : '#faad14' }}>
             {stats.recommended}<span style={{ color: '#bfbfbf', fontWeight: 400 }}>/{stats.recommendedTotal}</span>
           </div>
-          <div className="stat-card-label">Pipeline Models Ready</div>
+          <div className="stat-card-label">{t('config.pipelineModelsReady')}</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-value" style={{ color: '#597ef7' }}>{Math.round(completionPct)}%</div>
-          <div className="stat-card-label">Overall Completion</div>
+          <div className="stat-card-label">{t('config.overallCompletion')}</div>
         </div>
       </div>
 
@@ -670,9 +674,9 @@ const ConfigDashboard: React.FC = () => {
           status={completionPct === 100 ? 'success' : 'active'}
           format={(pct) => (
             <span style={{ fontSize: 13 }}>
-              {pct}% configured — {completionPct === 100
-                ? 'All ready!'
-                : `${totalCount - configuredCount} providers need API keys`}
+              {pct}% {t('config.configured')} — {completionPct === 100
+                ? t('config.allReady')
+                : `${totalCount - configuredCount} ${t('config.providersNeedKeys', { count: totalCount - configuredCount })}`}
             </span>
           )}
         />
@@ -683,7 +687,7 @@ const ConfigDashboard: React.FC = () => {
         <div className="config-layout">
           {/* --- Capability Sidebar --- */}
           <div className="cap-sidebar">
-            <div className="cap-sidebar-title">Capabilities</div>
+            <div className="cap-sidebar-title">{t('config.capabilities')}</div>
 
             {/* "All" option */}
             <div
@@ -692,7 +696,7 @@ const ConfigDashboard: React.FC = () => {
             >
               <Space>
                 <FilterOutlined />
-                <span>All Models</span>
+                <span>{t('config.allModels')}</span>
               </Space>
               <span className="cap-sidebar-badge">{models.length}</span>
             </div>
@@ -724,22 +728,25 @@ const ConfigDashboard: React.FC = () => {
               <div>
                 <Text strong style={{ fontSize: 15 }}>
                   {activeCap === 'all'
-                    ? 'All Models'
+                    ? t('config.allModels')
                     : `${CAPABILITY_LABELS[activeCap]?.icon || ''} ${CAPABILITY_LABELS[activeCap]?.label || activeCap}`}
                 </Text>
                 <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-                  {visibleModels.length} models
+                  {t('config.modelsCount', { count: visibleModels.length })}
                 </Text>
               </div>
 
               <Space>
                 {checkResults.length > 0 && (
                   <Tag color={checkResults.filter((r) => r.status === 'ok').length === checkResults.length ? 'green' : 'orange'}>
-                    Check: {checkResults.filter((r) => r.status === 'ok').length}/{checkResults.length}
+                    {t('config.checkResults', {
+                      ok: checkResults.filter((r) => r.status === 'ok').length,
+                      total: checkResults.length,
+                    })}
                   </Tag>
                 )}
                 <Button size="small" onClick={handleRunCheck} loading={checking}>
-                  Run Check
+                  {t('config.runCheck')}
                 </Button>
               </Space>
             </div>
@@ -748,7 +755,7 @@ const ConfigDashboard: React.FC = () => {
             {visibleModels.length === 0 ? (
               <div className="config-empty">
                 <div className="config-empty-icon">📭</div>
-                <div className="config-empty-text">No models in this category</div>
+                <div className="config-empty-text">{t('config.noModels')}</div>
               </div>
             ) : (
               <Row gutter={[14, 14]}>
@@ -763,7 +770,7 @@ const ConfigDashboard: React.FC = () => {
                         className={`model-card-enhanced ${isRecommended ? 'recommended' : ''} ${isUnavailable ? 'unavailable' : ''}`}
                       >
                         {isRecommended && (
-                          <span className="recommended-badge">⭐ Recommended</span>
+                          <span className="recommended-badge">{t('config.recommended')}</span>
                         )}
 
                         {/* Header */}
@@ -794,7 +801,7 @@ const ConfigDashboard: React.FC = () => {
                           <div className="model-card-status">
                             <span className={`status-dot ${model.has_api_key ? 'ok' : 'error'}`} />
                             <Text type="secondary" style={{ fontSize: 12 }}>
-                              {model.has_api_key ? 'Configured' : 'Not configured'}
+                              {model.has_api_key ? t('config.configured') : t('config.notConfigured')}
                             </Text>
                           </div>
                         </div>
@@ -816,7 +823,10 @@ const ConfigDashboard: React.FC = () => {
         <Card size="small" className="check-results-panel" style={{ marginTop: 16 }}>
           <Collapse size="small" defaultActiveKey={['1']}>
             <Panel
-              header={`Check Results: ${checkResults.filter((r) => r.status === 'ok').length}/${checkResults.length} OK`}
+              header={t('config.checkResults', {
+                ok: checkResults.filter((r) => r.status === 'ok').length,
+                total: checkResults.length,
+              })}
               key="1"
             >
               <Row gutter={[8, 4]}>
@@ -842,26 +852,26 @@ const ConfigDashboard: React.FC = () => {
       {/* ===== Quick Actions + .env Info ===== */}
       <Row gutter={16} style={{ marginTop: 16, marginBottom: 16 }}>
         <Col span={12}>
-          <Card size="small" title="Quick Actions">
+          <Card size="small" title={t('config.quickActions')}>
             <Space wrap>
               <Button icon={<ReloadOutlined />} onClick={handleRunCheck} loading={checking}>
-                Run Full Config Check
+                {t('config.runFullCheck')}
               </Button>
               <Button icon={<ThunderboltOutlined />} onClick={() => handleSkipConfig('free_fallback')}>
-                Skip — Use Free Models
+                {t('config.skipFreeModels')}
               </Button>
               <Button icon={<BulbOutlined />} onClick={() => handleSkipConfig('script_only')}>
-                Script Only (No API)
+                {t('config.scriptOnly')}
               </Button>
             </Space>
           </Card>
         </Col>
         <Col span={12}>
-          <Card size="small" title="Environment">
+          <Card size="small" title={t('config.environment')}>
             <Space direction="vertical" size="small" style={{ width: '100%' }}>
               <div>
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  {status?.project_root}/.env — {configuredCount} keys configured
+                  {status?.project_root}/.env — {t('config.configuredCountOfTotal', { configured: configuredCount, total: totalCount })}
                 </Text>
                 {envSafety?.issues?.length > 0 && (
                   <div style={{ marginTop: 4 }}>
@@ -881,20 +891,20 @@ const ConfigDashboard: React.FC = () => {
                       .filter(m => m.has_api_key)
                       .map(m => `${ENV_VAR_MAP[m.provider] || m.provider.toUpperCase() + '_API_KEY'}=<your-key>`)
                     navigator.clipboard.writeText(lines.join('\n'))
-                    message.success('.env format copied to clipboard')
+                    message.success(t('config.envFormatCopied'))
                   }}
                 >
-                  Copy .env Format
+                  {t('config.copyEnvFormat')}
                 </Button>
                 <Button
                   type="link"
                   size="small"
                   onClick={() => {
                     navigator.clipboard.writeText(`${status?.project_root}/.env`)
-                    message.success('Path copied')
+                    message.success(t('config.pathCopied'))
                   }}
                 >
-                  Copy Path
+                  {t('config.copyPath')}
                 </Button>
                 {envSafety?.recommendations?.length > 0 && (
                   <Tooltip title={envSafety.recommendations[0]}>
@@ -918,32 +928,31 @@ const ConfigDashboard: React.FC = () => {
         <Space>
           <SafetyCertificateOutlined style={{ color: '#52c41a', fontSize: 20 }} />
           <div>
-            <Text strong>No API keys configured? No problem.</Text>
+            <Text strong>{t('config.skipConfigTitle')}</Text>
             <br />
             <Text type="secondary" style={{ fontSize: 12 }}>
-              Click below to skip configuration and proceed with free/available models.
-              You can always add API keys later.
+              {t('config.skipConfigDesc')}
             </Text>
           </div>
           <Button icon={<ForwardOutlined />} onClick={() => handleSkipConfig('free_fallback')}>
-            Skip Config
+            {t('config.skipConfig')}
           </Button>
         </Space>
       </Card>
 
       {/* ===== Skip Config Modal (FR-5.2: auto-generated fallback plan) ===== */}
       <Modal
-        title="Skip Configuration"
+        title={t('config.skipConfigTitle2')}
         open={skipModalVisible}
         onOk={confirmSkip}
         onCancel={() => { setSkipModalVisible(false); setFallbackPlan(null) }}
-        okText="Continue"
-        cancelText="Go Back"
+        okText={t('config.continue')}
+        cancelText={t('config.goBack')}
         width={560}
       >
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <Paragraph style={{ marginBottom: 0 }}>
-            Choose how you want to proceed without configuring all API keys:
+            {t('config.chooseHowToProceed')}
           </Paragraph>
 
           <Card
@@ -954,10 +963,10 @@ const ConfigDashboard: React.FC = () => {
             <Space>
               <ThunderboltOutlined style={{ color: '#1890ff' }} />
               <div>
-                <Text strong>Use Free / Available Models</Text>
+                <Text strong>{t('config.useFreeModels')}</Text>
                 <br />
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  System will use available providers automatically. See planned setup below.
+                  {t('config.freeModelDesc')}
                 </Text>
               </div>
             </Space>
@@ -967,13 +976,13 @@ const ConfigDashboard: React.FC = () => {
               <div style={{ marginTop: 12 }}>
                 {loadingFallback ? (
                   <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                    <Spin size="small" /> <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>Analyzing available tools...</Text>
+                    <Spin size="small" /> <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>{t('config.analyzingTools')}</Text>
                   </div>
                 ) : fallbackPlan ? (
                   <div style={{ background: '#fafafa', borderRadius: 6, padding: '10px 14px', fontSize: 12 }}>
                     {fallbackPlan.can_proceed !== undefined && (
                       <div style={{ marginBottom: 8, fontWeight: 500, color: fallbackPlan.can_proceed ? '#52c41a' : '#ff4d4f' }}>
-                        {fallbackPlan.can_proceed ? '✅ Free pipeline can proceed' : '⚠️ Some capabilities have no free fallback'}
+                        {fallbackPlan.can_proceed ? t('config.freePipelineCanProceed') : t('config.someNoFreeFallback')}
                       </div>
                     )}
                     {fallbackPlan.media && (
@@ -1019,16 +1028,16 @@ const ConfigDashboard: React.FC = () => {
                     {fallbackPlan.uncovered && fallbackPlan.uncovered.length > 0 && (
                       <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid #f0f0f0' }}>
                         <Text type="warning" style={{ fontSize: 11 }}>
-                          ⚠️ No free fallback: {fallbackPlan.uncovered.map((u: any) =>
+                          ⚠️ {t('config.noFreeFallback', { tools: fallbackPlan.uncovered.map((u: any) =>
                             typeof u === 'string' ? u : u.tool || 'unknown'
-                          ).join(', ')}
+                          ).join(', ') })}
                         </Text>
                       </div>
                     )}
                   </div>
                 ) : (
                   <div style={{ fontSize: 11, color: '#bfbfbf', marginTop: 8 }}>
-                    Click a mode to see available options
+                    {t('config.clickModeToSee')}
                   </div>
                 )}
               </div>
@@ -1043,10 +1052,10 @@ const ConfigDashboard: React.FC = () => {
             <Space>
               <BulbOutlined style={{ color: '#1890ff' }} />
               <div>
-                <Text strong>Script & Scene Plan Only</Text>
+                <Text strong>{t('config.scriptOnlyTitle')}</Text>
                 <br />
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  Skip asset generation. Generate only script + scene plan — no API keys needed.
+                  {t('config.scriptOnlyDesc')}
                 </Text>
               </div>
             </Space>
@@ -1060,10 +1069,10 @@ const ConfigDashboard: React.FC = () => {
             <Space>
               <FallOutlined style={{ color: '#1890ff' }} />
               <div>
-                <Text strong>Skip & Configure Later</Text>
+                <Text strong>{t('config.skipLaterTitle')}</Text>
                 <br />
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  Start with minimal setup. Configure missing tools when needed.
+                  {t('config.skipLaterDesc')}
                 </Text>
               </div>
             </Space>

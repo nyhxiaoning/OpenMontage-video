@@ -9,6 +9,8 @@ import {
   UserOutlined,
   SettingOutlined,
   LogoutOutlined,
+  SunOutlined,
+  MoonOutlined,
 } from '@ant-design/icons'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { toggleTheme } from '@/store/slices/themeSlice'
@@ -159,7 +161,7 @@ const MainLayout: React.FC = () => {
           <h1 className={`font-bold text-lg ${state.collapsed ? 'hidden' : 'block'}`}>
             {t('layout.appName')}
           </h1>
-          {state.collapsed && <div className="w-8 h-8 bg-primary-500 rounded"></div>}
+          {state.collapsed && <div className="w-8 h-8 bg-primary-500 rounded flex items-center justify-center text-white text-sm font-bold">{t('layout.systemNameShort')}</div>}
         </div>
         <Menu
           mode="inline"
@@ -192,9 +194,8 @@ const MainLayout: React.FC = () => {
               type="text"
               onClick={handleThemeToggle}
               className="text-sm"
-            >
-              {isDarkMode ? '🌞' : '🌙'}
-            </Button>
+              icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
+            />
 
             <LanguageSwitcher size="small" />
 
@@ -207,7 +208,7 @@ const MainLayout: React.FC = () => {
             >
               <div className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 px-2 py-1 rounded">
                 <Avatar size="small" icon={<UserOutlined />} />
-                <span className="text-sm">{t('layout.admin')}</span>
+                <span className="text-sm">{t('layout.systemNameShort')}</span>
               </div>
             </Dropdown>
           </div>

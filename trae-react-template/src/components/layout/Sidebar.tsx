@@ -102,7 +102,7 @@ const Sidebar: React.FC<Props> = (props = {}) => {
     {
       key: '/config',
       icon: <ApiOutlined />,
-      label: 'Model Config',
+      label: t('menu.modelConfig'),
     },
     {
       key: '/user-management',
@@ -146,7 +146,7 @@ const Sidebar: React.FC<Props> = (props = {}) => {
       {/* Logo 区域 */}
       <div className="h-16 flex items-center justify-center border-b border-gray-200">
         <div className="text-xl font-bold text-blue-600">
-          {collapsed ? 'A' : 'Admin'}
+          {collapsed ? 'A' : t('layout.systemNameShort')}
         </div>
       </div>
 

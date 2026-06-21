@@ -1,6 +1,5 @@
 import { Dropdown, Button } from 'antd';
 import { GlobalOutlined } from '@ant-design/icons';
-import { useTranslation } from 'react-i18next';
 import { useLanguage } from '@/hooks/useLanguage';
 
 interface LanguageSwitcherProps {
@@ -8,7 +7,6 @@ interface LanguageSwitcherProps {
 }
 
 const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ size = 'middle' }) => {
-  const { t } = useTranslation();
   const { currentLanguage, changeLanguage } = useLanguage();
 
   const languageOptions = [

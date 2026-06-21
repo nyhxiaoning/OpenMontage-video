@@ -1,8 +1,7 @@
-import { ConfigProvider, theme } from 'antd';
+import { ConfigProvider } from 'antd';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import ConfigDashboard from '@/pages/config/ConfigDashboard';
-import { Provider } from 'react-redux';
-import { store } from '@/store';
+import I18nProvider from '@/components/I18nProvider';
 
 const App: React.FC = () => {
   const themeConfig = {
@@ -15,11 +14,13 @@ const App: React.FC = () => {
 
   return (
     <ConfigProvider theme={themeConfig}>
-      <Routes>
-        <Route path="/" element={<Navigate to="/config" replace />} />
-        <Route path="/config" element={<ConfigDashboard />} />
-        <Route path="*" element={<Navigate to="/config" replace />} />
-      </Routes>
+      <I18nProvider>
+        <Routes>
+          <Route path="/" element={<Navigate to="/config" replace />} />
+          <Route path="/config" element={<ConfigDashboard />} />
+          <Route path="*" element={<Navigate to="/config" replace />} />
+        </Routes>
+      </I18nProvider>
     </ConfigProvider>
   );
 };
