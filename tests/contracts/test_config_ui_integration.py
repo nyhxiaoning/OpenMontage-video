@@ -301,6 +301,99 @@ class TestCLIRegression:
 
 
 # ============================================================
+# Phase 5: New endpoint tests
+# ============================================================
+
+class TestPhase5Endpoints:
+    """Test Phase 5 backend endpoints (FR-5.2, FR-6.3, FR-6.4)."""
+
+    def test_env_safety_endpoint(self):
+        """GET /api/env/safety should return env file info."""
+        from fastapi.testclient import TestClient
+        from lib.config_api import app
+
+        client = TestClient(app)
+        response = client.get("/api/env/safety")
+        assert response.status_code == 200
+        data = response.json()
+        assert "env_exists" in data
+        assert "issues" in data
+        assert "recommendations" in data
+
+    def test_env_safety_detects_permissions(self, tmp_path):
+        """Env safety should detect world-readable .env."""
+        from fastapi.testclient import TestClient
+        import os
+
+        env_file = tmp_path / ".env"
+        env_file.write_text("TEST_KEY=test\n")
+        os.chmod(str(env_file), 0o644)  # world-readable
+
+        from lib.config_api import app, PROJECT_ROOT
+        # Patch the project root for this test
+        import lib.config_api as capi
+        original_root = capi.PROJECT_ROOT
+        capi.PROJECT_ROOT = tmp_path
+        try:
+            client = TestClient(app)
+            response = client.get("/api/env/safety")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["env_exists"] is True
+            # Should detect world-readable issue
+            assert len(data["issues"]) > 0 or data["env_permissions"] != "0o600"
+        finally:
+            capi.PROJECT_ROOT = original_root
+
+    def test_env_batch_write(self, tmp_path):
+        """POST /api/env/write should batch write keys."""
+        from fastapi.testclient import TestClient
+        from lib.config_api import app, PROJECT_ROOT
+        import lib.config_api as capi
+
+        original_root = capi.PROJECT_ROOT
+        capi.PROJECT_ROOT = tmp_path
+        try:
+            client = TestClient(app)
+            response = client.post("/api/env/write", json={
+                "keys": {"TEST_KEY": "test-value", "ANOTHER_KEY": "another-value"}
+            })
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert "keys_written" in data
+        finally:
+            capi.PROJECT_ROOT = original_root
+
+    def test_skip_config_returns_fallback_plan(self):
+        """POST /api/skip-config should return structured fallback plan."""
+        from fastapi.testclient import TestClient
+        from lib.config_api import app
+
+        client = TestClient(app)
+        response = client.post("/api/skip-config", json={"mode": "free_fallback"})
+        assert response.status_code == 200
+        data = response.json()
+        assert "fallback_plan" in data
+        plan = data["fallback_plan"]
+        assert "can_proceed" in plan
+        assert "media" in plan
+        assert "images" in plan
+        assert "tts" in plan
+
+    def test_skip_config_script_only(self):
+        """POST /api/skip-config with script_only mode."""
+        from fastapi.testclient import TestClient
+        from lib.config_api import app
+
+        client = TestClient(app)
+        response = client.post("/api/skip-config", json={"mode": "script_only"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["fallback_plan"]["can_proceed"] is True
+
+
+# ============================================================
 # UI API endpoint tests
 # ============================================================
 

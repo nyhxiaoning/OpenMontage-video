@@ -15,6 +15,7 @@ import {
   Collapse,
   Modal,
   Spin,
+  Tooltip,
 } from 'antd'
 import {
   CheckCircleOutlined,
@@ -30,6 +31,7 @@ import {
   BulbOutlined,
   FallOutlined,
   FilterOutlined,
+  CopyOutlined,
 } from '@ant-design/icons'
 
 import type { ModelCard, PipelineInfo, StatusResponse, ConfigCheckResult } from '@/services/configApi'
@@ -106,10 +108,15 @@ const ConfigDashboard: React.FC = () => {
   const [keyForm] = Form.useForm()
 
   // Pipeline execution state
-  const [execRunning, setExecRunning] = useState(false)
-  const [execResult, setExecResult] = useState<any>(null)
   const [stageChecks, setStageChecks] = useState<Record<string, any>>({})
   const [checkingStages, setCheckingStages] = useState(false)
+
+  // Phase 5: Skip config fallback plan
+  const [fallbackPlan, setFallbackPlan] = useState<any>(null)
+  const [loadingFallback, setLoadingFallback] = useState(false)
+
+  // Env safety check (FR-6.3)
+  const [envSafety, setEnvSafety] = useState<any>(null)
 
   /* ============================================================
      Data Fetching
@@ -277,6 +284,20 @@ const ConfigDashboard: React.FC = () => {
   const handleSkipConfig = async (mode: string) => {
     setSkipMode(mode)
     setSkipModalVisible(true)
+    setFallbackPlan(null)
+
+    // Fetch fallback plan (FR-5.2)
+    if (mode === 'free_fallback') {
+      setLoadingFallback(true)
+      try {
+        const plan = await configApi.skipConfig(mode)
+        setFallbackPlan(plan.fallback_plan || null)
+      } catch {
+        setFallbackPlan(null)
+      } finally {
+        setLoadingFallback(false)
+      }
+    }
   }
 
   const confirmSkip = async () => {
@@ -284,10 +305,16 @@ const ConfigDashboard: React.FC = () => {
       await configApi.skipConfig(skipMode)
       message.info('Proceeding with available models only')
       setSkipModalVisible(false)
+      setFallbackPlan(null)
     } catch (err: any) {
       message.error(err.message)
     }
   }
+
+  // Load env safety on mount (FR-6.3)
+  useEffect(() => {
+    configApi.getEnvSafety().then(setEnvSafety).catch(() => setEnvSafety(null))
+  }, [])
 
   // Run pre-flight check across all pipeline stages
   const handlePreFlightCheck = async () => {
@@ -391,25 +418,45 @@ const ConfigDashboard: React.FC = () => {
     }
 
     if (model.has_api_key && !expanded) {
+      const maskedKey = `${envVar}=${envVar.includes('KEY') ? 'sk-...' : '***'}`
       return (
-        <Space size="small">
-          <Button type="link" size="small" onClick={() => setExpanded(true)}>
-            Update Key
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            danger
-            onClick={() => {
-              Modal.confirm({
-                title: 'Remove API Key?',
-                content: `This will remove the ${model.provider} API key.`,
-                onOk: () => handleDeleteConfig(model.name),
-              })
-            }}
-          >
-            Remove
-          </Button>
+        <Space direction="vertical" size="small" style={{ width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Text code style={{ fontSize: 11, background: '#f5f5f5', padding: '2px 8px', borderRadius: 4, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {maskedKey}
+            </Text>
+            <Tooltip title="Copy .env line">
+              <Button
+                type="text"
+                size="small"
+                icon={<CopyOutlined />}
+                onClick={() => {
+                  navigator.clipboard.writeText(`${envVar}=<your-api-key>`)
+                  message.success('Copied')
+                }}
+                style={{ fontSize: 11 }}
+              />
+            </Tooltip>
+          </div>
+          <Space size="small">
+            <Button type="link" size="small" onClick={() => setExpanded(true)}>
+              Update Key
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              danger
+              onClick={() => {
+                Modal.confirm({
+                  title: 'Remove API Key?',
+                  content: `This will remove the ${model.provider} API key.`,
+                  onOk: () => handleDeleteConfig(model.name),
+                })
+              }}
+            >
+              Remove
+            </Button>
+          </Space>
         </Space>
       )
     }
@@ -811,20 +858,50 @@ const ConfigDashboard: React.FC = () => {
         </Col>
         <Col span={12}>
           <Card size="small" title="Environment">
-            <Space>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {status?.project_root}/.env — {configuredCount} keys configured
-              </Text>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => {
-                  navigator.clipboard.writeText(`${status?.project_root}/.env`)
-                  message.success('Path copied to clipboard')
-                }}
-              >
-                Copy Path
-              </Button>
+            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {status?.project_root}/.env — {configuredCount} keys configured
+                </Text>
+                {envSafety?.issues?.length > 0 && (
+                  <div style={{ marginTop: 4 }}>
+                    <Tag color="warning" style={{ fontSize: 11 }}>
+                      ⚠️ {envSafety.issues[0]}
+                    </Tag>
+                  </div>
+                )}
+              </div>
+              <Space size="small">
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => {
+                    // FR-2.6: Copy .env format
+                    const lines = models
+                      .filter(m => m.has_api_key)
+                      .map(m => `${ENV_VAR_MAP[m.provider] || m.provider.toUpperCase() + '_API_KEY'}=<your-key>`)
+                    navigator.clipboard.writeText(lines.join('\n'))
+                    message.success('.env format copied to clipboard')
+                  }}
+                >
+                  Copy .env Format
+                </Button>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${status?.project_root}/.env`)
+                    message.success('Path copied')
+                  }}
+                >
+                  Copy Path
+                </Button>
+                {envSafety?.recommendations?.length > 0 && (
+                  <Tooltip title={envSafety.recommendations[0]}>
+                    <ExclamationCircleOutlined style={{ color: '#faad14' }} />
+                  </Tooltip>
+                )}
+              </Space>
             </Space>
           </Card>
         </Col>
@@ -854,17 +931,18 @@ const ConfigDashboard: React.FC = () => {
         </Space>
       </Card>
 
-      {/* ===== Skip Config Modal ===== */}
+      {/* ===== Skip Config Modal (FR-5.2: auto-generated fallback plan) ===== */}
       <Modal
         title="Skip Configuration"
         open={skipModalVisible}
         onOk={confirmSkip}
-        onCancel={() => setSkipModalVisible(false)}
+        onCancel={() => { setSkipModalVisible(false); setFallbackPlan(null) }}
         okText="Continue"
         cancelText="Go Back"
+        width={560}
       >
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
-          <Paragraph>
+          <Paragraph style={{ marginBottom: 0 }}>
             Choose how you want to proceed without configuring all API keys:
           </Paragraph>
 
@@ -879,11 +957,82 @@ const ConfigDashboard: React.FC = () => {
                 <Text strong>Use Free / Available Models</Text>
                 <br />
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  System will use Pexels stock media, Google TTS, Remotion animations,
-                  and other available providers automatically.
+                  System will use available providers automatically. See planned setup below.
                 </Text>
               </div>
             </Space>
+
+            {/* Fallback plan visualization (FR-5.2/5.3) */}
+            {skipMode === 'free_fallback' && (
+              <div style={{ marginTop: 12 }}>
+                {loadingFallback ? (
+                  <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                    <Spin size="small" /> <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>Analyzing available tools...</Text>
+                  </div>
+                ) : fallbackPlan ? (
+                  <div style={{ background: '#fafafa', borderRadius: 6, padding: '10px 14px', fontSize: 12 }}>
+                    {fallbackPlan.can_proceed !== undefined && (
+                      <div style={{ marginBottom: 8, fontWeight: 500, color: fallbackPlan.can_proceed ? '#52c41a' : '#ff4d4f' }}>
+                        {fallbackPlan.can_proceed ? '✅ Free pipeline can proceed' : '⚠️ Some capabilities have no free fallback'}
+                      </div>
+                    )}
+                    {fallbackPlan.media && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                        <Text>🎬 Video</Text>
+                        <Text type={fallbackPlan.media.available ? 'success' : 'danger'} style={{ fontSize: 11 }}>
+                          {fallbackPlan.media.source}
+                        </Text>
+                      </div>
+                    )}
+                    {fallbackPlan.images && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                        <Text>🖼️ Images</Text>
+                        <Text type={fallbackPlan.images.available ? 'success' : 'danger'} style={{ fontSize: 11 }}>
+                          {fallbackPlan.images.source}
+                        </Text>
+                      </div>
+                    )}
+                    {fallbackPlan.tts && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                        <Text>🔊 Narration</Text>
+                        <Text type={fallbackPlan.tts.available ? 'success' : 'danger'} style={{ fontSize: 11 }}>
+                          {fallbackPlan.tts.source}
+                        </Text>
+                      </div>
+                    )}
+                    {fallbackPlan.music && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                        <Text>🎵 Music</Text>
+                        <Text type={fallbackPlan.music.available ? 'success' : 'danger'} style={{ fontSize: 11 }}>
+                          {fallbackPlan.music.source}
+                        </Text>
+                      </div>
+                    )}
+                    {fallbackPlan.composition && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                        <Text>🎞️ Composition</Text>
+                        <Text type={fallbackPlan.composition.available ? 'success' : 'danger'} style={{ fontSize: 11 }}>
+                          {fallbackPlan.composition.source}
+                        </Text>
+                      </div>
+                    )}
+                    {fallbackPlan.uncovered && fallbackPlan.uncovered.length > 0 && (
+                      <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid #f0f0f0' }}>
+                        <Text type="warning" style={{ fontSize: 11 }}>
+                          ⚠️ No free fallback: {fallbackPlan.uncovered.map((u: any) =>
+                            typeof u === 'string' ? u : u.tool || 'unknown'
+                          ).join(', ')}
+                        </Text>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#bfbfbf', marginTop: 8 }}>
+                    Click a mode to see available options
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
 
           <Card
@@ -897,8 +1046,7 @@ const ConfigDashboard: React.FC = () => {
                 <Text strong>Script & Scene Plan Only</Text>
                 <br />
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  Skip asset generation entirely. Generate only the script and scene plan
-                  — no API keys needed for these stages.
+                  Skip asset generation. Generate only script + scene plan — no API keys needed.
                 </Text>
               </div>
             </Space>
@@ -915,7 +1063,7 @@ const ConfigDashboard: React.FC = () => {
                 <Text strong>Skip & Configure Later</Text>
                 <br />
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  Start pipeline with minimal setup. Configure missing tools when needed.
+                  Start with minimal setup. Configure missing tools when needed.
                 </Text>
               </div>
             </Space>

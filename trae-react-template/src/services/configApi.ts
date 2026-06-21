@@ -88,6 +88,12 @@ export const configApi = {
 
   checkStage: (pipeline: string, stage: string, autoSkip = false): Promise<any> =>
     api.post('/check/stage', { pipeline, stage, auto_skip: autoSkip }),
+
+  getEnvSafety: (): Promise<any> =>
+    api.get('/env/safety'),
+
+  writeEnvBatch: (keys: Record<string, string>): Promise<any> =>
+    api.post('/env/write', { keys }),
 }
 
 export default configApi

@@ -527,6 +527,99 @@ async def check_stage(payload: dict) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/env/safety")
+async def env_safety() -> dict[str, Any]:
+    """Check .env file permissions and structure (FR-6.3, FR-6.4)."""
+    import os as _os
+    import stat as _stat
+
+    env_path = PROJECT_ROOT / ".env"
+    env_local_path = PROJECT_ROOT / ".env.local"
+
+    result = {
+        "env_exists": env_path.exists(),
+        "env_local_exists": env_local_path.exists(),
+        "env_permissions": None,
+        "env_local_permissions": None,
+        "issues": [],
+        "recommendations": [],
+    }
+
+    if env_path.exists():
+        try:
+            st = env_path.stat()
+            mode = st.st_mode
+            is_world_readable = bool(mode & 0o007)  # group+other read
+            if is_world_readable:
+                result["issues"].append(".env file is readable by group/others — API keys may be exposed")
+                result["recommendations"].append("Run: chmod 600 .env")
+            result["env_permissions"] = _file_mode_octal(mode)
+        except OSError as e:
+            result["issues"].append(f"Cannot check .env permissions: {e}")
+
+    if env_local_path.exists():
+        try:
+            st = env_local_path.stat()
+            result["env_local_permissions"] = _file_mode_octal(st.st_mode)
+        except OSError as e:
+            result["issues"].append(f"Cannot check .env.local permissions: {e}")
+
+    if not env_local_path.exists():
+        result["recommendations"].append("Create .env.local for machine-specific overrides (gitignored)")
+
+    return result
+
+
+def _file_mode_octal(mode: int) -> str:
+    """Convert file mode to readable permission string like '0o600'."""
+    return oct(mode & 0o7777)
+
+
+@app.post("/api/env/write")
+async def write_env_batch(req: dict) -> dict[str, Any]:
+    """Batch write multiple key-value pairs to .env file.
+
+    Writes to .env.local if available (FR-6.4), otherwise .env.
+    """
+    env_path = PROJECT_ROOT / ".env.local" if (PROJECT_ROOT / ".env.local").exists() else PROJECT_ROOT / ".env"
+    keys = req.get("keys", {})
+    if not isinstance(keys, dict):
+        raise HTTPException(status_code=400, detail="keys must be a dict")
+
+    existing: dict[str, str] = {}
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                existing[k.strip()] = v.strip()
+
+    existing.update(keys)
+
+    with open(env_path, "w") as f:
+        for k, v in sorted(existing.items()):
+            f.write(f"{k}={v}\n")
+
+    # Also set in current process
+    for k, v in keys.items():
+        os.environ[k] = v
+
+    # Refresh registry
+    if _REGISTRY_AVAILABLE:
+        try:
+            tool_registry.ensure_discovered()
+        except Exception:
+            pass
+
+    return {
+        "success": True,
+        "written_to": str(env_path),
+        "keys_written": list(keys.keys()),
+    }
+
+
 @app.post("/api/check")
 async def run_config_check() -> list[ConfigCheckResult]:
     """Run a full configuration check against pipeline requirements."""
@@ -610,32 +703,141 @@ async def stream_config_check() -> StreamingResponse:
 
 @app.post("/api/skip-config")
 async def skip_config(req: SkipConfigRequest) -> dict[str, Any]:
-    """Handle skip-config mode: record user's choice and return free fallback plan."""
-    free_models = {
-        "free_fallback": {
-            "video_generation": ["pexels", "pixabay"],
-            "image_generation": ["pexels", "pixabay"],
-            "tts": ["google_tts"],
-            "music_generation": [],
-            "enhancement": ["ffmpeg"],
-        },
-        "script_only": {
-            "note": "Script and scene plan stages do not require any API keys.",
-            "no_generation": True,
-        },
-        "skip": {
-            "note": "Pipeline will proceed with whatever tools are available.",
-            "no_generation": True,
-        },
+    """Handle skip-config mode: record user's choice and return free fallback plan.
+
+    FR-5.2: System generates optimal available plan based on current config.
+    FR-5.3: If no free models available, prompts user to configure or use Remotion-only.
+    """
+    from lib.config_health import plan_fallback, get_configured_providers
+
+    if req.mode == "free_fallback":
+        # Get tools needed by the pipeline to generate accurate fallback plan
+        env = dict(os.environ)
+        configured_providers = get_configured_providers(env)
+
+        # Discover all tools and find which ones are NOT configured
+        if _REGISTRY_AVAILABLE:
+            try:
+                tool_registry.ensure_discovered()
+                all_tools: list[str] = []
+                for tool in tool_registry._tools.values():
+                    provider = getattr(tool, "provider", "")
+                    if provider not in configured_providers:
+                        all_tools.append(getattr(tool, "name", ""))
+
+                fallback = plan_fallback(all_tools[:20])  # Limit to first 20 for performance
+                can_proceed = fallback["can_proceed_free"]
+                plan_display = {
+                    "can_proceed": can_proceed,
+                    "media": _format_cap_plan(fallback, "video_generation", "Video"),
+                    "images": _format_cap_plan(fallback, "image_generation", "Images"),
+                    "tts": _format_cap_plan(fallback, "tts", "Narration"),
+                    "music": _format_cap_plan(fallback, "music_generation", "Music"),
+                    "composition": _format_cap_plan(fallback, "video_post", "Composition"),
+                    "uncovered": _format_uncovered(fallback["uncovered"]),
+                }
+            except Exception:
+                plan_display = _default_fallback_plan()
+        else:
+            plan_display = _default_fallback_plan()
+
+        return {
+            "mode": req.mode,
+            "selected_tools": req.selected_tools,
+            "fallback_plan": plan_display,
+            "message": "Pipeline will proceed with free/available models only",
+        }
+
+    elif req.mode == "script_only":
+        return {
+            "mode": req.mode,
+            "selected_tools": req.selected_tools,
+            "fallback_plan": {
+                "can_proceed": True,
+                "media": {"available": True, "source": "No generation needed"},
+                "images": {"available": True, "source": "No generation needed"},
+                "tts": {"available": False, "source": "Skipped"},
+                "music": {"available": False, "source": "Skipped"},
+                "composition": {"available": False, "source": "Skipped"},
+                "uncovered": [],
+            },
+            "message": "Script and scene plan stages do not require any API keys.",
+        }
+
+    else:  # skip
+        return {
+            "mode": req.mode,
+            "selected_tools": req.selected_tools,
+            "fallback_plan": {
+                "can_proceed": True,
+                "note": "Pipeline will use whatever tools are currently available.",
+                "media": {"available": True, "source": "Currently available tools"},
+                "images": {"available": True, "source": "Currently available tools"},
+                "tts": {"available": True, "source": "Currently available tools"},
+                "music": {"available": True, "source": "Currently available tools"},
+                "composition": {"available": True, "source": "Currently available tools"},
+                "uncovered": [],
+            },
+            "message": "Pipeline will proceed with available tools only.",
+        }
+
+
+def _default_fallback_plan() -> dict[str, Any]:
+    """Default fallback plan when registry is unavailable."""
+    return {
+        "can_proceed": True,
+        "media": {"available": True, "source": "Pexels / Pixabay (stock)"},
+        "images": {"available": True, "source": "Pexels / Pixabay (stock)"},
+        "tts": {"available": True, "source": "Google TTS (free)"},
+        "music": {"available": False, "source": "No free music generation available"},
+        "composition": {"available": True, "source": "FFmpeg / Remotion (free)"},
+        "uncovered": [{"tool": "Music Generation", "reason": "No free API available"}],
     }
 
-    plan = free_models.get(req.mode, free_models["skip"])
-    return {
-        "mode": req.mode,
-        "selected_tools": req.selected_tools,
-        "free_fallback_plan": plan,
-        "message": "Pipeline will proceed with free/available models only",
+
+def _format_cap_plan(fallback: dict, cap_key: str, label: str) -> dict[str, Any]:
+    """Format a capability entry for the fallback plan display."""
+    providers = fallback.get("free_plan", {}).get(cap_key, [])
+    uncovered = fallback.get("uncovered", [])
+
+    if cap_key == "music_generation":
+        if not providers:
+            return {"available": False, "source": "No free music generation available", "providers": []}
+        return {"available": True, "source": providers[0] if providers else "None", "providers": providers}
+
+    if providers:
+        return {"available": True, "source": f"{providers[0]} (free)" if providers else "None", "providers": providers}
+
+    # Check if any tool in this capability is uncovered
+    uncovered_tools = [u for u in uncovered if _is_cap_match(u, cap_key)]
+    if uncovered_tools:
+        return {"available": False, "source": f"No free fallback: {uncovered_tools[0].get('tool', cap_key)}", "providers": []}
+
+    return {"available": True, "source": "FFmpeg / built-in", "providers": []}
+
+
+def _format_uncovered(uncovered: list) -> list[dict]:
+    """Format uncovered tools for display."""
+    return [{"tool": tool, "reason": "No free API available"} for tool in uncovered[:5]]
+
+
+def _is_cap_match(uncovered_item: Any, cap_key: str) -> bool:
+    """Check if an uncovered item matches a capability."""
+    if isinstance(uncovered_item, str):
+        return False
+    tool_name = uncovered_item.get("tool", "") if isinstance(uncovered_item, dict) else str(uncovered_item)
+    cap_map = {
+        "video_generation": ["seedance", "kling", "hunyuan", "wan", "cogvideo", "ltx_video"],
+        "image_generation": ["flux", "dalle", "imagen", "recraft", "tongyi"],
+        "tts": ["elevenlabs", "openai_tts", "google_tts", "piper", "doubao"],
+        "music_generation": ["suno", "elevenlabs_music"],
+        "video_post": ["video_compose", "video_stitch"],
     }
+    for tools in cap_map.values():
+        for t in tools:
+            if t in tool_name.lower():
+                return cap_key in cap_map and any(t in tool_name.lower() for t in cap_map.get(cap_key, [""]))
+    return False
 
 
 @app.get("/api/capabilities")

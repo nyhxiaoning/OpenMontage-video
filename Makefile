@@ -104,6 +104,14 @@ webui-stop:
 	@echo "==> Stopping WebUI (port 3001)..."
 	-lsof -ti:3001 | xargs kill -9 2>/dev/null || echo "  No process on port 3001"
 
+# FR-1.1: Auto-start WebUI on setup (background)
+webui-start-bg:
+	@echo "==> Starting Config API in background..."
+	@nohup venv/bin/python -m uvicorn lib.config_api:app --host 0.0.0.0 --port 3001 > /tmp/openmontage-webui.log 2>&1 &
+	@sleep 2
+	@echo "==> WebUI started. Check http://localhost:3001"
+	@echo "    Logs: /tmp/openmontage-webui.log"
+
 config-check:
 	@echo "==> Running configuration check..."
 	venv/bin/python -c "import sys; sys.path.insert(0, '.'); from tools.tool_registry import registry; registry.discover(); import json; print(json.dumps(registry.provider_menu_summary(), indent=2))"
