@@ -105,6 +105,12 @@ const ConfigDashboard: React.FC = () => {
 
   const [keyForm] = Form.useForm()
 
+  // Pipeline execution state
+  const [execRunning, setExecRunning] = useState(false)
+  const [execResult, setExecResult] = useState<any>(null)
+  const [stageChecks, setStageChecks] = useState<Record<string, any>>({})
+  const [checkingStages, setCheckingStages] = useState(false)
+
   /* ============================================================
      Data Fetching
      ============================================================ */
@@ -283,20 +289,72 @@ const ConfigDashboard: React.FC = () => {
     }
   }
 
+  // Run pre-flight check across all pipeline stages
+  const handlePreFlightCheck = async () => {
+    if (!selectedPipeline || !pipelineDetail) {
+      message.warning('Please select a pipeline first')
+      return
+    }
+    setCheckingStages(true)
+    setStageChecks({})
+    try {
+      const stages = pipelineDetail.stages || []
+      const results: Record<string, any> = {}
+      for (const stage of stages) {
+        const stageName = stage.name
+        try {
+          const check = await configApi.checkStage(selectedPipeline, stageName, false)
+          results[stageName] = check
+        } catch {
+          results[stageName] = { ready: false, error: 'Check failed' }
+        }
+      }
+      setStageChecks(results)
+      const blocked = Object.values(results).filter((r: any) => !r.ready).length
+      if (blocked > 0) {
+        message.warning(`${blocked} stages have config issues — see details below`)
+      } else {
+        message.success('All stages pass config check')
+      }
+    } catch (err: any) {
+      message.error(`Pre-flight check failed: ${err.message}`)
+    } finally {
+      setCheckingStages(false)
+    }
+  }
+
   const handleStartPipeline = () => {
     if (!selectedPipeline) {
       message.warning('Please select a pipeline first')
       return
     }
-    Modal.confirm({
-      title: 'Start Pipeline?',
-      content: `Starting "${selectedPipeline}" pipeline. Make sure required models are configured.`,
-      okText: 'Start',
-      cancelText: 'Cancel',
-      onOk: () => {
-        message.info(`Pipeline "${selectedPipeline}" would start here`)
-      },
-    })
+    if (!pipelineDetail) {
+      message.warning('Pipeline details not loaded yet')
+      return
+    }
+    const blocked = Object.entries(stageChecks).filter(([, r]: [string, any]) => !r.ready)
+    if (blocked.length > 0) {
+      const names = blocked.map(([name]) => name).join(', ')
+      Modal.confirm({
+        title: 'Start Pipeline with Config Issues?',
+        content: `Stages with missing config: ${names}. Pipeline may fail or use fallbacks. Proceed anyway?`,
+        okText: 'Start with Fallbacks',
+        cancelText: 'Configure First',
+        onOk: () => {
+          message.info(`Pipeline "${selectedPipeline}" started with fallback mode`)
+        },
+      })
+    } else {
+      Modal.confirm({
+        title: 'Start Pipeline?',
+        content: `Starting "${selectedPipeline}" pipeline. All stages pass config check.`,
+        okText: 'Start',
+        cancelText: 'Cancel',
+        onOk: () => {
+          message.info(`Pipeline "${selectedPipeline}" would start here`)
+        },
+      })
+    }
   }
 
   /* ============================================================
@@ -453,6 +511,86 @@ const ConfigDashboard: React.FC = () => {
           />
         </div>
       </div>
+
+      {/* ===== Stats Row ===== */}
+
+      {/* ===== Pre-flight Check Panel ===== */}
+      {selectedPipeline && (
+        <Card size="small" style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <Text strong style={{ fontSize: 14 }}>Pre-flight Check</Text>
+              <br />
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Verify all stages have required tools configured before starting
+              </Text>
+            </div>
+            <Space>
+              <Button
+                size="small"
+                icon={<ReloadOutlined />}
+                loading={checkingStages}
+                onClick={handlePreFlightCheck}
+              >
+                Check All Stages
+              </Button>
+            </Space>
+          </div>
+
+          {/* Stage check results */}
+          {Object.keys(stageChecks).length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <Row gutter={[8, 8]}>
+                {pipelineDetail?.stages?.map((stage: any) => {
+                  const check = stageChecks[stage.name]
+                  if (!check) return null
+                  const ready = check.ready
+                  const missingCount = (check.missing_required?.length || 0) + (check.missing_optional?.length || 0)
+                  return (
+                    <Col span={12} key={stage.name}>
+                      <Card size="small" style={{
+                        borderColor: ready ? '#b7eb8f' : '#ffccc7',
+                        background: ready ? '#f6ffed' : '#fff2f0',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{
+                            width: 8, height: 8, borderRadius: '50%',
+                            background: ready ? '#52c41a' : '#ff4d4f',
+                            flexShrink: 0,
+                          }} />
+                          <Text strong style={{ fontSize: 13 }}>{stage.name}</Text>
+                          {ready ? (
+                            <Tag color="success" style={{ fontSize: 11 }}>Ready</Tag>
+                          ) : (
+                            <Tag color="error" style={{ fontSize: 11 }}>
+                              {missingCount} tool{missingCount > 1 ? 's' : ''} need config
+                            </Tag>
+                          )}
+                        </div>
+                        {!ready && check.missing_required?.length > 0 && (
+                          <div style={{ marginTop: 4, fontSize: 11, color: '#ff4d4f' }}>
+                            Required: {check.missing_required.map((t: any) => t.tool_name || t).join(', ')}
+                          </div>
+                        )}
+                        {!ready && check.missing_optional?.length > 0 && (
+                          <div style={{ marginTop: 2, fontSize: 11, color: '#faad14' }}>
+                            Optional: {check.missing_optional.map((t: any) => t.tool_name || t).join(', ')}
+                          </div>
+                        )}
+                        {check.free_fallbacks_available?.length > 0 && (
+                          <div style={{ marginTop: 2, fontSize: 11, color: '#1890ff' }}>
+                            Free fallbacks: {check.free_fallbacks_available.join(', ')}
+                          </div>
+                        )}
+                      </Card>
+                    </Col>
+                  )
+                })}
+              </Row>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* ===== Stats Row ===== */}
       <div className="config-stats">
