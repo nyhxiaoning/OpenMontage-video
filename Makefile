@@ -1,4 +1,4 @@
-.PHONY: setup install install-dev install-gpu test test-contracts lint clean preflight demo demo-list hyperframes-doctor hyperframes-warm
+.PHONY: setup install install-dev install-gpu test test-contracts lint clean preflight demo demo-list hyperframes-doctor hyperframes-warm webui-start webui-stop config-check
 
 # ---- One-command setup ----
 
@@ -75,6 +75,43 @@ lint:
 	python -m py_compile tools/tool_registry.py
 	python -m py_compile tools/cost_tracker.py
 	python -m py_compile tools/composition_validator.py
+
+# ---- WebUI (optional) ----
+
+install-webui:
+	@echo "==> Installing WebUI dependencies..."
+	pip install fastapi uvicorn httpx
+	cd trae-react-template && pnpm install
+	@echo "==> WebUI dependencies installed."
+
+webui-start:
+	@echo "==> Building React frontend..."
+	cd trae-react-template && pnpm build
+	@echo "==> Starting Config API server on http://localhost:3001..."
+	@echo "    WebUI: http://localhost:3001"
+	@echo "    API docs: http://localhost:3001/docs"
+	venv/bin/python -m uvicorn lib.config_api:app --host 0.0.0.0 --port 3001
+
+webui-start-dev:
+	@echo "==> Starting dev servers..."
+	@echo "    React dev (Vite): http://localhost:5173 (proxy to :3001)"
+	@echo "    API server: http://localhost:3001"
+	@echo "    Start API in one terminal: venv/bin/python -m uvicorn lib.config_api:app --port 3001"
+	@echo "    Start React in another: cd trae-react-template && pnpm dev"
+	venv/bin/python -m uvicorn lib.config_api:app --host 0.0.0.0 --port 3001
+
+webui-stop:
+	@echo "==> Stopping WebUI (port 3001)..."
+	-lsof -ti:3001 | xargs kill -9 2>/dev/null || echo "  No process on port 3001"
+
+config-check:
+	@echo "==> Running configuration check..."
+	venv/bin/python -c "import sys; sys.path.insert(0, '.'); from tools.tool_registry import registry; registry.discover(); import json; print(json.dumps(registry.provider_menu_summary(), indent=2))"
+	@echo ""
+	@echo "==> Health checks..."
+	venv/bin/python -c "import asyncio, sys; sys.path.insert(0, '.'); from lib.config_health import check_all_providers; results = asyncio.run(check_all_providers()); [print(f'  {r.provider}: {r.status.value} — {r.message}') for r in results]"
+
+# ---- Cleanup ----
 
 clean:
 	python -c "import pathlib, shutil; [shutil.rmtree(p) for p in pathlib.Path('.').rglob('__pycache__')]; [p.unlink() for p in pathlib.Path('.').rglob('*.pyc')]"
