@@ -65,21 +65,26 @@ api.interceptors.response.use(
 )
 
 export const configApi = {
-  getStatus: () => api.get<StatusResponse>('/status'),
+  getStatus: (): Promise<StatusResponse> =>
+    api.get('/status').then((r: any) => r.data as StatusResponse),
 
-  getModels: () => api.get<ModelCard[]>('/models'),
+  getModels: (): Promise<ModelCard[]> =>
+    api.get('/models').then((r: any) => r.data as ModelCard[]),
 
-  getPipelines: () => api.get<PipelineInfo[]>('/pipelines'),
+  getPipelines: (): Promise<PipelineInfo[]> =>
+    api.get('/pipelines').then((r: any) => r.data as PipelineInfo[]),
 
-  getPipelineDetail: (name: string) => api.get(`/pipelines/${name}`),
+  getPipelineDetail: (name: string): Promise<any> =>
+    api.get(`/pipelines/${name}`).then((r: any) => r.data),
 
-  configModel: (name: string, key: string, value: string, persist = true) =>
-    api.post(`/models/${name}/config`, { key, value, persist }),
+  configModel: (name: string, key: string, value: string, persist = true): Promise<any> =>
+    api.post(`/models/${name}/config`, { key, value, persist }).then((r: any) => r.data),
 
-  deleteModelConfig: (name: string) =>
-    api.delete(`/models/${name}/config`),
+  deleteModelConfig: (name: string): Promise<any> =>
+    api.delete(`/models/${name}/config`).then((r: any) => r.data),
 
-  runConfigCheck: () => api.post<ConfigCheckResult[]>('/check'),
+  runConfigCheck: (): Promise<ConfigCheckResult[]> =>
+    api.post('/check').then((r: any) => r.data as ConfigCheckResult[]),
 
   streamConfigCheck: () =>
     fetch('http://localhost:3001/api/check/stream').then((res) => {
@@ -87,7 +92,6 @@ export const configApi = {
       return new ReadableStream({
         start(controller) {
           const reader = res.body!.getReader()
-          const decoder = new TextDecoder()
           reader.read().then(({ done }) => {
             if (done) controller.close()
           })
@@ -100,10 +104,11 @@ export const configApi = {
       })
     }),
 
-  skipConfig: (mode = 'free_fallback', selectedTools: string[] = []) =>
-    api.post('/skip-config', { mode, selected_tools: selectedTools }),
+  skipConfig: (mode = 'free_fallback', selectedTools: string[] = []): Promise<any> =>
+    api.post('/skip-config', { mode, selected_tools: selectedTools }).then((r: any) => r.data),
 
-  getCapabilities: () => api.get('/capabilities'),
+  getCapabilities: (): Promise<any> =>
+    api.get('/capabilities').then((r: any) => r.data),
 }
 
 export default configApi

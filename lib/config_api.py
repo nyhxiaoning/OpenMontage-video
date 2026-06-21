@@ -447,6 +447,7 @@ async def config_model(name: str, req: ConfigWriteRequest) -> dict[str, Any]:
         "PEXELS_API_KEY": "pexels",
         "PIXABAY_API_KEY": "pixabay",
         "DOUBAO_SPEECH_API_KEY": "doubao",
+        "TONGYI_API_KEY": "tongyi",
     }
 
     if req.key in provider_map:
@@ -574,17 +575,28 @@ async def stream_config_check() -> StreamingResponse:
 async def skip_config(req: SkipConfigRequest) -> dict[str, Any]:
     """Handle skip-config mode: record user's choice and return free fallback plan."""
     free_models = {
-        "video_generation": ["pexels", "pixabay"],
-        "image_generation": ["pexels", "pixabay"],
-        "tts": ["google_tts"],
-        "music_generation": [],
-        "enhancement": ["ffmpeg"],
+        "free_fallback": {
+            "video_generation": ["pexels", "pixabay"],
+            "image_generation": ["pexels", "pixabay"],
+            "tts": ["google_tts"],
+            "music_generation": [],
+            "enhancement": ["ffmpeg"],
+        },
+        "script_only": {
+            "note": "Script and scene plan stages do not require any API keys.",
+            "no_generation": True,
+        },
+        "skip": {
+            "note": "Pipeline will proceed with whatever tools are available.",
+            "no_generation": True,
+        },
     }
 
+    plan = free_models.get(req.mode, free_models["skip"])
     return {
         "mode": req.mode,
         "selected_tools": req.selected_tools,
-        "free_fallback_plan": free_models,
+        "free_fallback_plan": plan,
         "message": "Pipeline will proceed with free/available models only",
     }
 

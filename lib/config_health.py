@@ -117,6 +117,13 @@ _HEALTH_CHECKS: dict[str, dict] = {
         "success_codes": [200, 401],
         "label": "Doubao (TTS)",
     },
+    "tongyi": {
+        "env_var": "TONGYI_API_KEY",
+        "url": "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis",
+        "headers": lambda key: {"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        "success_codes": [200, 400, 401],
+        "label": "Tongyi (Image Gen)",
+    },
 }
 
 

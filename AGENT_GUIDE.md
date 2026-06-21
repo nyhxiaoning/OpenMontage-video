@@ -327,7 +327,27 @@ Already Available:
 - If the user declines setup, proceed with the best available path — no nagging.
 - If a tool shares an env var with others, group them (read from `dependencies` field).
 
-### Setup Offer Protocol
+### Stage-Level Config Check Protocol
+
+Before each pipeline stage begins (especially assets, which uses paid API tools), run a configuration check:
+
+```python
+from lib.pipeline_config_check import check_stage_config, format_check_report
+
+result = check_stage_config(pipeline="cinematic", stage="assets", project_id="my-project")
+```
+
+**If `result.ready` is `False`:**
+1. Present `format_check_report(result)` to the user
+2. Offer options: (a) configure missing keys, (b) use fallback, (c) skip
+3. Record the user's choice in `decision_log` with category `config_check`
+4. Only proceed after user explicitly approves
+
+**If all stages pass:** proceed silently — do not narrate.
+
+**Fallback priority:** tool's own `fallback_tools` > free providers from `_get_free_fallback()` > skip.
+
+### Composition Runtimes (Inside video_compose)
 
 When tools are `UNAVAILABLE` but can be fixed with simple configuration, **offer the user setup help instead of silently working around the limitation.** Many tools are one env var away from working.
 
